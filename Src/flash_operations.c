@@ -7,7 +7,7 @@
 #define DATA_32                 ((uint32_t)0xEEEEEEEE)
 // TODO: error codes instead of just status 0 and 1
 uint32_t FirstSector = 0, NbOfSectors = 0, Address = 0, SectorError = 0;
-__IO uint32_t data32 = 0, MemoryProgramStatus = 0;
+volatile uint32_t data32 = 0, MemoryProgramStatus = 0;
 
 uint32_t addr_write = FLASH_USER_START_ADDR;
 
@@ -186,7 +186,7 @@ uint8_t Flash_Write()
 
 uint32_t Flash_Read(uint32_t addr)
 {
-	__IO uint32_t flash_word = *(__IO uint32_t*) addr;
+	volatile uint32_t flash_word = *(volatile uint32_t*) addr;
 	return flash_word;
 }
 
@@ -200,7 +200,7 @@ uint8_t Flash_Check(uint32_t start_addr, uint32_t end_addr)
 
 	while (addr < end_addr)
 	{
-		data32 = *(__IO uint32_t*) addr;
+		data32 = *(volatile uint32_t*) addr;
 
 		if (data32 != DATA_32)
 		{

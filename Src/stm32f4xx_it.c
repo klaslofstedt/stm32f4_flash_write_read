@@ -38,9 +38,11 @@
 
 /* USER CODE BEGIN 0 */
 extern osSemaphoreId ButtonBinarySemHandle;
+extern osSemaphoreId UartBinarySemHandle;
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
+extern UART_HandleTypeDef huart2;
 
 extern TIM_HandleTypeDef htim3;
 
@@ -84,6 +86,24 @@ void TIM3_IRQHandler(void)
 }
 
 /**
+* @brief This function handles USART2 global interrupt.
+*/
+void USART2_IRQHandler(void)
+{
+  /* USER CODE BEGIN USART2_IRQn 0 */
+
+  /* USER CODE END USART2_IRQn 0 */
+  HAL_UART_IRQHandler(&huart2);
+  /* USER CODE BEGIN USART2_IRQn 1 */
+	if (__HAL_UART_GET_FLAG(&huart2, UART_FLAG_RXNE) != RESET) {
+		__HAL_UART_CLEAR_FLAG(&huart2, UART_FLAG_RXNE);       //clear ISR flag
+		osSemaphoreRelease(UartBinarySemHandle);
+
+	}
+  /* USER CODE END USART2_IRQn 1 */
+}
+
+/**
 * @brief This function handles EXTI line[15:10] interrupts.
 */
 void EXTI15_10_IRQHandler(void)
@@ -100,7 +120,7 @@ void EXTI15_10_IRQHandler(void)
 /* USER CODE BEGIN 1 */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-	if(GPIO_Pin == B1_BUTTON_Pin){
+	if (GPIO_Pin == B1_BUTTON_Pin) {
 		osSemaphoreRelease(ButtonBinarySemHandle);
 	}
 }

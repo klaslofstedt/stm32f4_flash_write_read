@@ -195,7 +195,7 @@ status_t LSM6DS3_begin()
 //  Accelerometer section
 //
 //****************************************************************************//
-int16_t LSM6DS3_readRawAccelX( void )
+int16_t LSM6DS3_readRawAccX( void )
 {
 	int16_t output;
 	status_t errorLevel = LSM6DS3_readRegisterInt16( &output, LSM6DS3_ACC_GYRO_OUTX_L_XL );
@@ -212,13 +212,13 @@ int16_t LSM6DS3_readRawAccelX( void )
 	}*/
 	return output;
 }
-float LSM6DS3_readFloatAccelX( void )
+float LSM6DS3_readFloatAccX( void )
 {
-	float output = LSM6DS3_calcAccel(LSM6DS3_readRawAccelX());
+	float output = LSM6DS3_calcAcc(LSM6DS3_readRawAccX());
 	return output;
 }
 
-int16_t LSM6DS3_readRawAccelY( void )
+int16_t LSM6DS3_readRawAccY( void )
 {
 	int16_t output;
 	status_t errorLevel = LSM6DS3_readRegisterInt16( &output, LSM6DS3_ACC_GYRO_OUTY_L_XL );
@@ -235,13 +235,13 @@ int16_t LSM6DS3_readRawAccelY( void )
 	}*/
 	return output;
 }
-float LSM6DS3_readFloatAccelY( void )
+float LSM6DS3_readFloatAccY( void )
 {
-	float output = LSM6DS3_calcAccel(LSM6DS3_readRawAccelY());
+	float output = LSM6DS3_calcAcc(LSM6DS3_readRawAccY());
 	return output;
 }
 
-int16_t LSM6DS3_readRawAccelZ( void )
+int16_t LSM6DS3_readRawAccZ( void )
 {
 	int16_t output;
 	status_t errorLevel = LSM6DS3_readRegisterInt16( &output, LSM6DS3_ACC_GYRO_OUTZ_L_XL );
@@ -258,13 +258,13 @@ int16_t LSM6DS3_readRawAccelZ( void )
 	}*/
 	return output;
 }
-float LSM6DS3_readFloatAccelZ( void )
+float LSM6DS3_readFloatAccZ( void )
 {
-	float output = LSM6DS3_calcAccel(LSM6DS3_readRawAccelZ());
+	float output = LSM6DS3_calcAcc(LSM6DS3_readRawAccZ());
 	return output;
 }
 
-float LSM6DS3_calcAccel( int16_t input )
+float LSM6DS3_calcAcc( int16_t input )
 {
 	uint8_t temp_range;
 	if(accelRange == LSM6DS3_ACC_GYRO_FS_XL_16g){
@@ -279,7 +279,7 @@ float LSM6DS3_calcAccel( int16_t input )
 //  Gyroscope section
 //
 //****************************************************************************//
-int16_t LSM6DS3_readRawGyroX( void )
+int16_t LSM6DS3_readRawGyrX( void )
 {
 	int16_t output;
 	status_t errorLevel = LSM6DS3_readRegisterInt16( &output, LSM6DS3_ACC_GYRO_OUTX_L_G );
@@ -296,13 +296,13 @@ int16_t LSM6DS3_readRawGyroX( void )
 	}*/
 	return output;
 }
-float LSM6DS3_readFloatGyroX( void )
+float LSM6DS3_readFloatGyrX( void )
 {
-	float output = LSM6DS3_calcGyro(LSM6DS3_readRawGyroX());
+	float output = LSM6DS3_calcGyr(LSM6DS3_readRawGyrX());
 	return output;
 }
 
-int16_t LSM6DS3_readRawGyroY( void )
+int16_t LSM6DS3_readRawGyrY( void )
 {
 	int16_t output;
 	status_t errorLevel = LSM6DS3_readRegisterInt16( &output, LSM6DS3_ACC_GYRO_OUTY_L_G );
@@ -319,13 +319,13 @@ int16_t LSM6DS3_readRawGyroY( void )
 	}*/
 	return output;
 }
-float LSM6DS3_readFloatGyroY( void )
+float LSM6DS3_readFloatGyrY( void )
 {
-	float output = LSM6DS3_calcGyro(LSM6DS3_readRawGyroY());
+	float output = LSM6DS3_calcGyr(LSM6DS3_readRawGyrY());
 	return output;
 }
 
-int16_t LSM6DS3_readRawGyroZ( void )
+int16_t LSM6DS3_readRawGyrZ( void )
 {
 	int16_t output;
 	status_t errorLevel = LSM6DS3_readRegisterInt16( &output, LSM6DS3_ACC_GYRO_OUTZ_L_G );
@@ -342,13 +342,13 @@ int16_t LSM6DS3_readRawGyroZ( void )
 	}*/
 	return output;
 }
-float LSM6DS3_readFloatGyroZ( void )
+float LSM6DS3_readFloatGyrZ( void )
 {
-	float output = LSM6DS3_calcGyro(LSM6DS3_readRawGyroZ());
+	float output = LSM6DS3_calcGyr(LSM6DS3_readRawGyrZ());
 	return output;
 }
 
-float LSM6DS3_calcGyro( int16_t input )
+float LSM6DS3_calcGyr( int16_t input )
 {
 	uint8_t temp_range;
 	// TODO: add mode options
