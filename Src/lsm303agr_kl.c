@@ -7,15 +7,30 @@ extern I2C_HandleTypeDef hi2c1;
 
 #define _BV(bit) (1 << (bit))
 
-double mapDouble(double x, double in_min, double in_max, double out_min,
-		double out_max)
+float mapFloat(float x, float in_min, float in_max, float out_min,
+		float out_max)
 {
 	return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
-double LSM303AGR_getMagFromScaledValue(int16_t value)
+float LSM303AGR_getMagFromScaledValue(int16_t value)
 {
 	return value * 1.5;
+}
+
+uint16_t LSM303AGR_readRawMagX()
+{
+	return (LSM303AGR_readRegister16Bits(LSM303AGR_OUTX_L_REG_M));
+}
+
+uint16_t LSM303AGR_readRawMagY()
+{
+	return (LSM303AGR_readRegister16Bits(LSM303AGR_OUTY_L_REG_M));
+}
+
+uint16_t LSM303AGR_readRawMagZ()
+{
+	return (LSM303AGR_readRegister16Bits(LSM303AGR_OUTZ_L_REG_M));
 }
 
 float LSM303AGR_readMagX()

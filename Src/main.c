@@ -367,8 +367,11 @@ void StartImuTask(void const * argument)
 		}
 		data++;*/
 		//MX_MEMS_Library_Process();
-		UART_Print(" %.4f", LSM303AGR_readMagX());
+		//UART_Print(" %.4f", LSM303AGR_readMagX());
 		//UART_Print("%04X ", LSM6DS3_readRawAccelX());
+		UART_Print("%04X ", LSM303AGR_readRawMagX());
+		UART_Print("%04X ", LSM303AGR_readRawMagY());
+		UART_Print("%04X ", LSM303AGR_readRawMagZ());
 		UART_Print("\n\r");
 	}
   /* USER CODE END StartImuTask */
