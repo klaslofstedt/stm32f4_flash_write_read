@@ -184,7 +184,7 @@ uint8_t Flash_Write()
 	return Flash_Check(FLASH_USER_START_ADDR, FLASH_USER_END_ADDR);
 }
 
-uint32_t Flash_Read(uint32_t addr)
+volatile uint32_t Flash_Read(uint32_t addr)
 {
 	volatile uint32_t flash_word = *(volatile uint32_t*) addr;
 	return flash_word;

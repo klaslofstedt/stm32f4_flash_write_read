@@ -237,7 +237,7 @@ uint16_t LSM303AGR_readRawMagX();
 uint16_t LSM303AGR_readRawMagY();
 uint16_t LSM303AGR_readRawMagZ();
 float mapDouble(float x, float in_min, float in_max, float out_min, float out_max);
-float LSM303AGR_getMagFromScaledValue(int16_t value);
+float LSM303AGR_calcMag(int16_t value);
 void LSM303AGR_magInit();
 void LSM303AGR_setLPF();
 //void LSM303AGR_disableMagnetometer();

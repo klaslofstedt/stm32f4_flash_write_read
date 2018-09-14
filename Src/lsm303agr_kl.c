@@ -13,7 +13,7 @@ float mapFloat(float x, float in_min, float in_max, float out_min,
 	return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
-float LSM303AGR_getMagFromScaledValue(int16_t value)
+float LSM303AGR_calcMag(int16_t value)
 {
 	return value * 1.5;
 }
@@ -35,16 +35,16 @@ uint16_t LSM303AGR_readRawMagZ()
 
 float LSM303AGR_readMagX()
 {
-	return LSM303AGR_getMagFromScaledValue(LSM303AGR_readRegister16Bits(LSM303AGR_OUTX_L_REG_M));
+	return LSM303AGR_calcMag(LSM303AGR_readRegister16Bits(LSM303AGR_OUTX_L_REG_M));
 }
 
 float LSM303AGR_readMagY()
 {
-	return LSM303AGR_getMagFromScaledValue(LSM303AGR_readRegister16Bits(LSM303AGR_OUTY_L_REG_M));
+	return LSM303AGR_calcMag(LSM303AGR_readRegister16Bits(LSM303AGR_OUTY_L_REG_M));
 }
 float LSM303AGR_readMagZ()
 {
-	return LSM303AGR_getMagFromScaledValue(LSM303AGR_readRegister16Bits(LSM303AGR_OUTZ_L_REG_M));
+	return LSM303AGR_calcMag(LSM303AGR_readRegister16Bits(LSM303AGR_OUTZ_L_REG_M));
 }
 
 /*bool LSM303AGR_checkWhoAmI()

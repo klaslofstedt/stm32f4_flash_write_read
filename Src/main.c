@@ -56,6 +56,7 @@
 //#include "app_mems-library.h"
 #include "lsm6dsl_kl.h"
 #include "lsm303agr_kl.h"
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
@@ -68,18 +69,33 @@ osThreadId ImuTaskHandle;
 osThreadId ButtonTaskHandle;
 osThreadId PrintFlashTaskHandle;
 osSemaphoreId ButtonBinarySemHandle;
-osSemaphoreId UartBinarySemHandle;
 osSemaphoreId ImuSampleBinarySemHandle;
 
 /* USER CODE BEGIN PV */
 
 /* Private macro -------------------------------------------------------------*/
+
+#define UART_RX_SIZE 3
+
 /* Private variables ---------------------------------------------------------*/
+
 enum ImuTaskRunning
 {
 	IDLE, RUNNING
 };
-volatile enum ImuTaskRunning g_isRunning = IDLE;
+volatile enum ImuTaskRunning ImuIsRunning = IDLE;
+
+typedef struct
+{
+	uint16_t Option;
+} OptionStruct;
+
+osMailQDef(UartPrintOptionsQueueHandle, 1, OptionStruct);
+osMailQId UartPrintOptionsQueueHandle;
+
+/* Global UART RX buffer */
+uint8_t UartRxData[UART_RX_SIZE];
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -94,9 +110,12 @@ void StartPrintFlashTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
-static void Print_Addr(uint32_t addr);
+//static void Print_Addr(uint32_t addr);
 static uint32_t Pack_16to32(uint16_t temp1, uint16_t temp2);
 static void Unpack_32to16(uint32_t temp1, uint16_t *temp2, uint16_t *temp3);
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart);
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin);
+void Print_Banner();
 
 /* USER CODE END PFP */
 
@@ -136,13 +155,16 @@ int main(void)
 	MX_USART2_UART_Init();
 	MX_I2C1_Init();
 	/* USER CODE BEGIN 2 */
-	__HAL_UART_ENABLE_IT(&huart2, UART_IT_RXNE);
+	HAL_UART_Receive_IT(&huart2, UartRxData, UART_RX_SIZE);
+	//__HAL_UART_ENABLE_IT(&huart2, UART_IT_RXNE);
 	LSM6DS3_begin();
 	LSM303AGR_magInit();
 	//MX_MEMS_Library_Init();
 	if (!Flash_EraseAll()) {
 		UART_Print("Flash erase ERR\n\r");
 	}
+	Print_Banner();
+	//UART_Print("Press USER Button to start sampling IMU. Send any character to print Flash.\n\r");
 
 	/* USER CODE END 2 */
 
@@ -154,10 +176,6 @@ int main(void)
 	/* definition and creation of ButtonBinarySem */
 	osSemaphoreDef(ButtonBinarySem);
 	ButtonBinarySemHandle = osSemaphoreCreate(osSemaphore(ButtonBinarySem), 1);
-
-	/* definition and creation of UartBinarySem */
-	osSemaphoreDef(UartBinarySem);
-	UartBinarySemHandle = osSemaphoreCreate(osSemaphore(UartBinarySem), 1);
 
 	/* definition and creation of ImuSampleBinarySem */
 	osSemaphoreDef(ImuSampleBinarySem);
@@ -193,8 +211,13 @@ int main(void)
 	/* add threads, ... */
 	/* USER CODE END RTOS_THREADS */
 
+	/* Create the queue(s) */
+	/* definition and creation of UartPrintOptionsQueue */
+
 	/* USER CODE BEGIN RTOS_QUEUES */
 	/* add queues, ... */
+	UartPrintOptionsQueueHandle = osMailCreate(
+			osMailQ(UartPrintOptionsQueueHandle), NULL);
 	/* USER CODE END RTOS_QUEUES */
 
 	/* Start scheduler */
@@ -227,7 +250,8 @@ void SystemClock_Config(void)
 
 	/**Configure the main internal regulator output voltage
 	 */
-	__HAL_RCC_PWR_CLK_ENABLE();
+	__HAL_RCC_PWR_CLK_ENABLE()
+	;
 
 	__HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE2);
 
@@ -293,7 +317,6 @@ static void MX_I2C1_Init(void)
 /* USART2 init function */
 static void MX_USART2_UART_Init(void)
 {
-
 	huart2.Instance = USART2;
 	huart2.Init.BaudRate = 115200;
 	huart2.Init.WordLength = UART_WORDLENGTH_8B;
@@ -321,10 +344,14 @@ static void MX_GPIO_Init(void)
 	GPIO_InitTypeDef GPIO_InitStruct;
 
 	/* GPIO Ports Clock Enable */
-	__HAL_RCC_GPIOC_CLK_ENABLE();
-	__HAL_RCC_GPIOH_CLK_ENABLE();
-	__HAL_RCC_GPIOA_CLK_ENABLE();
-	__HAL_RCC_GPIOB_CLK_ENABLE();
+	__HAL_RCC_GPIOC_CLK_ENABLE()
+	;
+	__HAL_RCC_GPIOH_CLK_ENABLE()
+	;
+	__HAL_RCC_GPIOA_CLK_ENABLE()
+	;
+	__HAL_RCC_GPIOB_CLK_ENABLE()
+	;
 
 	/*Configure GPIO pin Output Level */
 	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
@@ -350,9 +377,51 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+	if (GPIO_Pin == B1_BUTTON_Pin) {
+		osSemaphoreRelease(ButtonBinarySemHandle);
+	}
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+	HAL_UART_Receive_IT(&huart2, UartRxData, UART_RX_SIZE);
+
+	static OptionStruct *PrintOption;
+	PrintOption = osMailAlloc(UartPrintOptionsQueueHandle, osWaitForever);
+
+	uint8_t UartRxString[UART_RX_SIZE + 1];
+
+	strncpy((char *) UartRxString, (char *) UartRxData, 3);
+	UartRxString[UART_RX_SIZE] = '\0';
+
+	//UART_Print("%s\n\r", UartRxString);
+
+	if (strcmp((char *) UartRxString, "reg") == 0) {
+		PrintOption->Option = 1;
+	}
+	else if (strcmp((char *) UartRxString, "mag") == 0) {
+		PrintOption->Option = 2;
+	}
+	else if (strcmp((char *) UartRxString, "acc") == 0) {
+		PrintOption->Option = 3;
+	}
+	else if (strcmp((char *) UartRxString, "gyr") == 0) {
+		PrintOption->Option = 4;
+	}
+	else if (strcmp((char *) UartRxString, "all") == 0) {
+		PrintOption->Option = 5;
+	}
+	else {
+		PrintOption->Option = 0;
+	}
+	osMailPut(UartPrintOptionsQueueHandle, PrintOption);
+}
+
 static uint32_t Pack_16to32(uint16_t temp1, uint16_t temp2)
 {
-	return ((uint32_t)temp1 << 16) + temp2;
+	return ((uint32_t) temp1 << 16) + temp2;
 }
 
 static void Unpack_32to16(uint32_t temp1, uint16_t *temp2, uint16_t *temp3)
@@ -360,18 +429,36 @@ static void Unpack_32to16(uint32_t temp1, uint16_t *temp2, uint16_t *temp3)
 	*temp2 = (uint16_t) (temp1 >> 16);
 	*temp3 = (uint16_t) (temp1 & 0xffff);
 }
-static void Print_Addr(uint32_t addr)
+
+void Print_Banner()
 {
-	uint16_t temp1, temp2;
-	Unpack_32to16(addr, &temp1, &temp2);
-	static uint8_t count;
-	UART_Print(" %04X %04X", temp1, temp2);
-	count++;
-	if (count > 7) {
-		UART_Print("\n\r");
-		count = 0;
-	}
+	UART_Print(
+			"********************************* FLASH DESTROYER v1.0 *********************************\n\r");
+	UART_Print("*\n\r");
+	UART_Print(
+			"* Press USER BUTTON to start/stop sampling of the 9-DOF IMU\n\r");
+	UART_Print("*\n\r");
+	UART_Print("* Send 'reg' to print all raw registers\n\r");
+	UART_Print("* Send 'all' to print all scaled sensors \n\r");
+	UART_Print("* Send 'mag' to print scaled magnetometer \n\r");
+	UART_Print("* Send 'acc' to print scaled accelerometer \n\r");
+	UART_Print("* Send 'gyr' to print scaled gyrometer \n\r");
+	UART_Print("*\n\r");
+	UART_Print(
+			"****************************************************************************************\n\r");
 }
+/*static void Print_Addr(uint16_t temp)
+ {
+ //uint16_t temp1, temp2;
+ //Unpack_32to16(addr, &temp1, &temp2);
+ static uint8_t count;
+ UART_Print(" %04X", temp);
+ count++;
+ if (count > 9) {
+ UART_Print("\n\r");
+ count = 0;
+ }
+ }*/
 
 /* USER CODE END 4 */
 
@@ -393,6 +480,7 @@ void StartImuTask(void const * argument)
 {
 	/* USER CODE BEGIN StartImuTask */
 	osSemaphoreWait(ImuSampleBinarySemHandle, osWaitForever);
+	//osThreadSuspend(ImuTaskHandle);
 	/* Infinite loop */
 	for (;;) {
 		osSemaphoreWait(ImuSampleBinarySemHandle, osWaitForever);
@@ -401,54 +489,54 @@ void StartImuTask(void const * argument)
 
 		uint16_t temp1, temp2;
 
-		temp1 = (uint16_t)LSM303AGR_readRawMagX();
-		temp2 = (uint16_t)LSM303AGR_readRawMagY();
-		UART_Print("%04X ", temp1);
-		UART_Print("%04X ", temp2);
-		if(!Flash_WriteWord(Pack_16to32(temp1, temp2))){
+		temp1 = (uint16_t) LSM303AGR_readRawMagX();
+		temp2 = (uint16_t) LSM303AGR_readRawMagY();
+		//UART_Print("%04X ", temp1);
+		//UART_Print("%04X ", temp2);
+		if (!Flash_WriteWord(Pack_16to32(temp1, temp2))) {
 			UART_Print("Error writing flash\n\r");
 		}
-		temp1 = (uint16_t)LSM303AGR_readRawMagZ();
-		temp2 = (uint16_t)LSM6DS3_readRawAccX();
-		UART_Print("%04X ", temp1);
-		UART_Print("%04X ", temp2);
-		if(!Flash_WriteWord(Pack_16to32(temp1, temp2))){
+		temp1 = (uint16_t) LSM303AGR_readRawMagZ();
+		temp2 = (uint16_t) LSM6DS3_readRawAccX();
+		//UART_Print("%04X ", temp1);
+		//UART_Print("%04X ", temp2);
+		if (!Flash_WriteWord(Pack_16to32(temp1, temp2))) {
 			UART_Print("Error writing flash\n\r");
 		}
-		temp1 = (uint16_t)LSM6DS3_readRawAccY();
-		temp2 = (uint16_t)LSM6DS3_readRawAccZ();
-		UART_Print("%04X ", temp1);
-		UART_Print("%04X ", temp2);
-		if(!Flash_WriteWord(Pack_16to32(temp1, temp2))){
+		temp1 = (uint16_t) LSM6DS3_readRawAccY();
+		temp2 = (uint16_t) LSM6DS3_readRawAccZ();
+		//UART_Print("%04X ", temp1);
+		//UART_Print("%04X ", temp2);
+		if (!Flash_WriteWord(Pack_16to32(temp1, temp2))) {
 			UART_Print("Error writing flash\n\r");
 		}
-		temp1 = (uint16_t)LSM6DS3_readRawGyrX();
-		temp2 = (uint16_t)LSM6DS3_readRawGyrY();
-		UART_Print("%04X ", temp1);
-		UART_Print("%04X ", temp2);
-		UART_Print("\n\r");
-		if(!Flash_WriteWord(Pack_16to32(temp1, temp2))){
+		temp1 = (uint16_t) LSM6DS3_readRawGyrX();
+		temp2 = (uint16_t) LSM6DS3_readRawGyrY();
+		//UART_Print("%04X ", temp1);
+		//UART_Print("%04X ", temp2);
+		//UART_Print("\n\r");
+		if (!Flash_WriteWord(Pack_16to32(temp1, temp2))) {
 			UART_Print("Error writing flash\n\r");
 		}
-		temp1 = (uint16_t)LSM6DS3_readRawGyrZ();
-		temp2 = (uint16_t)0x0000;
-		UART_Print("%04X ", temp1);
-		UART_Print("%04X ", temp2);
-		if(!Flash_WriteWord(Pack_16to32(temp1, temp2))){
+		temp1 = (uint16_t) LSM6DS3_readRawGyrZ();
+		temp2 = (uint16_t) 0x0000;
+		//UART_Print("%04X ", temp1);
+		//UART_Print("%04X ", temp2);
+		if (!Flash_WriteWord(Pack_16to32(temp1, temp2))) {
 			UART_Print("Error writing flash\n\r");
 		}
 		/*UART_Print("%04X ", LSM303AGR_readRawMagX());
-		UART_Print("%04X ", LSM303AGR_readRawMagY());
-		UART_Print("%04X ", LSM303AGR_readRawMagZ());
+		 UART_Print("%04X ", LSM303AGR_readRawMagY());
+		 UART_Print("%04X ", LSM303AGR_readRawMagZ());
 
-		UART_Print("%04X ", LSM6DS3_readRawAccelX());
-		UART_Print("%04X ", LSM6DS3_readRawAccelY());
-		UART_Print("%04X ", LSM6DS3_readRawAccelZ());
+		 UART_Print("%04X ", LSM6DS3_readRawAccelX());
+		 UART_Print("%04X ", LSM6DS3_readRawAccelY());
+		 UART_Print("%04X ", LSM6DS3_readRawAccelZ());
 
-		UART_Print("%04X ", LSM6DS3_readRawGyroX());
-		UART_Print("%04X ", LSM6DS3_readRawGyroY());
-		UART_Print("%04X ", LSM6DS3_readRawGyroZ());
-		UART_Print("\n\r");*/
+		 UART_Print("%04X ", LSM6DS3_readRawGyroX());
+		 UART_Print("%04X ", LSM6DS3_readRawGyroY());
+		 UART_Print("%04X ", LSM6DS3_readRawGyroZ());
+		 UART_Print("\n\r");*/
 	}
 	/* USER CODE END StartImuTask */
 }
@@ -466,19 +554,23 @@ void StartButtonTask(void const * argument)
 		osSemaphoreWait(ButtonBinarySemHandle, osWaitForever);
 		/* Read button value in order to do a debounce check */
 		/* By reading it instead of assuming '1' we can change trigger without having to change this task */
-		uint8_t button_debounce = HAL_GPIO_ReadPin(B1_BUTTON_GPIO_Port, B1_BUTTON_Pin);
+		uint8_t button_debounce = HAL_GPIO_ReadPin(B1_BUTTON_GPIO_Port,
+		B1_BUTTON_Pin);
 		osDelay(40);
 		/* Read button value again and compare with previous value */
-		if (HAL_GPIO_ReadPin(B1_BUTTON_GPIO_Port, B1_BUTTON_Pin) == button_debounce) {
+		if (HAL_GPIO_ReadPin(B1_BUTTON_GPIO_Port, B1_BUTTON_Pin)
+				== button_debounce) {
 			/* Turn on IMU sampling if it's not already sampling */
-			if (g_isRunning == IDLE) {
-				g_isRunning = RUNNING;
+			if (ImuIsRunning == IDLE) {
+				ImuIsRunning = RUNNING;
+				//osThreadResume(ImuTaskHandle);
 				UART_Print("Start Sampling IMU\n\r");
 				osSemaphoreRelease(ImuSampleBinarySemHandle);
 			}
 			/* Else turn off IMU sampling if it's already sampling */
 			else {
-				g_isRunning = IDLE;
+				ImuIsRunning = IDLE;
+				//osThreadSuspend(ImuTaskHandle);
 				UART_Print("Stop Sampling IMU\n\r");
 				osSemaphoreWait(ImuSampleBinarySemHandle, osWaitForever);
 			}
@@ -491,24 +583,95 @@ void StartButtonTask(void const * argument)
 void StartPrintFlashTask(void const * argument)
 {
 	/* USER CODE BEGIN StartPrintFlashTask */
-
-	/* Initialize UartBinarySem to 0 */
-	osSemaphoreWait(UartBinarySemHandle, osWaitForever);
-
+	static OptionStruct *PrintOption;
+	osEvent OptionEvent;
 	/* Infinite loop */
 	for (;;) {
-		osSemaphoreWait(UartBinarySemHandle, osWaitForever);
-		UART_Print("Print Flash\n\r");
-		// Start printing from the first address FLASH_USER_START_ADDR
-		uint32_t addr_start = FLASH_USER_START_ADDR;
-		// Stop printing at the last written address
-		uint32_t addr_end = Flash_GetEndAddr();
-		// Print from flash while
-		while (addr_start < addr_end) {		//FLASH_USER_END_ADDR){
-			// Print flash mem over UART
-			Print_Addr(Flash_Read(addr_start));
-			// Go to next block of memory
-			addr_start = addr_start + 4;
+		OptionEvent = osMailGet(UartPrintOptionsQueueHandle, osWaitForever);
+		if (OptionEvent.status == osEventMail) {
+			PrintOption = OptionEvent.value.p;
+			osMailFree(UartPrintOptionsQueueHandle, PrintOption);
+			if (PrintOption->Option) {
+				// Start printing from the first address FLASH_USER_START_ADDR
+				uint32_t addr_start = FLASH_USER_START_ADDR;
+
+				// Stop printing at the last written address
+				uint32_t addr_end = Flash_GetEndAddr();
+				uint16_t addr_arr[10];
+				while (addr_start < addr_end) {
+					uint8_t i;
+					for (i = 0; i < 10; i += 2) {
+						Unpack_32to16(Flash_Read(addr_start), &addr_arr[i], &addr_arr[i + 1]);
+						addr_start = addr_start + 4;
+					}
+					switch (PrintOption->Option)
+					{
+					case 1:
+						UART_Print(
+								" Mag X %04X Y %04X Z %04X Acc X %04X Y %04X Z %04X Gyr X %04X Y %04X Z %04X Padding %04X\n\r",
+								addr_arr[0], addr_arr[1], addr_arr[2],
+								addr_arr[3], addr_arr[4], addr_arr[5],
+								addr_arr[6], addr_arr[7], addr_arr[8],
+								addr_arr[9]);
+						break;
+					case 2:
+						UART_Print(" Mag X %.4f Y %.4f Z %.4f\n\r",
+								LSM303AGR_calcMag((int8_t) addr_arr[0]),
+								LSM303AGR_calcMag((int8_t) addr_arr[1]),
+								LSM303AGR_calcMag((int8_t) addr_arr[2]));
+						break;
+					case 3:
+						UART_Print(" Acc X %.4f Y %.4f Z %.4f\n\r",
+								LSM6DS3_calcAcc((int8_t) addr_arr[3]),
+								LSM6DS3_calcAcc((int8_t) addr_arr[4]),
+								LSM6DS3_calcAcc((int8_t) addr_arr[5]));
+						//UART_Print("print acc\n\r");
+						break;
+					case 4:
+						UART_Print(" Gyr X Y Z %.4f %.4f %.4f\n\r",
+								LSM6DS3_calcGyr((int8_t) addr_arr[6]),
+								LSM6DS3_calcGyr((int8_t) addr_arr[7]),
+								LSM6DS3_calcGyr((int8_t) addr_arr[8]));
+						break;
+					case 5:
+						//UART_Print("print all\n\r");
+						UART_Print(" Mag X Y Z %.4f %.4f %.4f\n\r",
+								LSM303AGR_calcMag((int8_t) addr_arr[0]),
+								LSM303AGR_calcMag((int8_t) addr_arr[1]),
+								LSM303AGR_calcMag((int8_t) addr_arr[2]));
+						UART_Print(" Acc X Y Z %.4f %.4f %.4f\n\r",
+								LSM6DS3_calcAcc((int8_t) addr_arr[3]),
+								LSM6DS3_calcAcc((int8_t) addr_arr[4]),
+								LSM6DS3_calcAcc((int8_t) addr_arr[5]));
+						UART_Print(" Gyr X Y Z %.4f %.4f %.4f\n\r",
+								LSM6DS3_calcGyr((int8_t) addr_arr[6]),
+								LSM6DS3_calcGyr((int8_t) addr_arr[7]),
+								LSM6DS3_calcGyr((int8_t) addr_arr[8]));
+						break;
+					default:
+						break;
+						// Wrong flag
+						//UART_Print("Wrong Option! Try again...\n\r");
+					}
+					osDelay(10);
+				}
+				/*//osSemaphoreWait(UartBinarySemHandle, osWaitForever);
+				 //UART_Print("Print Flash\n\r");
+				 // Start printing from the first address FLASH_USER_START_ADDR
+				 uint32_t addr_start = FLASH_USER_START_ADDR;
+				 // Stop printing at the last written address
+				 uint32_t addr_end = Flash_GetEndAddr();
+				 // Print from flash while
+				 while (addr_start < addr_end) {		//FLASH_USER_END_ADDR){
+				 // Print flash mem over UART
+				 Print_Addr(Flash_Read(addr_start));
+				 // Go to next block of memory
+				 addr_start = addr_start + 4;
+				 }*/
+			}
+			else {
+				UART_Print("Wrong Option! Try again...\n\r");
+			}
 		}
 	}
 	/* USER CODE END StartPrintFlashTask */

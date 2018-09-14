@@ -14,7 +14,7 @@
 #define ADDR_FLASH_SECTOR_7     ((uint32_t)0x08060000) /* Base @ of Sector 7, 128 Kbytes */
 
 uint8_t Flash_Write();
-uint32_t Flash_Read(uint32_t addr);
+volatile uint32_t Flash_Read(uint32_t addr);
 uint8_t Flash_Check(uint32_t start_addr, uint32_t end_addr);
 uint8_t Flash_WriteWord(uint32_t flash_data);
 uint8_t Flash_EraseAll();
